@@ -14,7 +14,7 @@ SERVER_IP = socket.gethostbyname(socket.gethostname())
 SERVER_PORT = 3000
 BROADCAST_PORT = 6000
 BUFF_SIZE = 65536
-CHUNK = 10*1024
+CHUNK = 20*1024
 
 track_metadata = {}
 
@@ -96,7 +96,7 @@ def start_streaming_server():
                 # broadcast chunk data
                 print(f"[Sending chunk {i+1} (size: {len(chunks[i])} b)]")
                 broadcast_socket.sendto(chunks[i], ("255.255.255.255", 6000))
-                time.sleep(0.01) # broadcast throttle
+                time.sleep(0.1) # broadcast throttle
                 
 def run():
     print("********** Vector Music Server **********")
