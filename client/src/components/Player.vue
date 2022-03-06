@@ -1,46 +1,54 @@
 <template>
   <div>
-    Player
-    <audio id="player" controls>
-      <source src="" type="audio/mpeg" />
-      Your browser does not support the audio element.
-    </audio>
+    <h1 v-if="connection_status == 0">Loading...</h1>
+    <h1 v-else-if="connection_status == 2">Error</h1>
+    <div v-else>
+      <img :src="song_metadata['img']" width="400" />
+      <h1>{{ song_metadata["title"] }}</h1>
+      <h2>
+        <i>{{ song_metadata["artist"] }}</i>
+      </h2>
+    </div>
   </div>
 </template>
 
 <script>
-import net from "net";
-
 export default {
   name: "Player",
   data() {
-    return {};
+    return {
+      connection_status: 0,
+      websocket: undefined,
+      song_metadata: {},
+    };
   },
-  async mounted() {
-    const client = new net.Socket();
-    const port = 6000;
-    const host = "0.0.0.0";
+  mounted() {
+    this.websocket = new WebSocket("ws://localhost:8001/");
 
-    client.connect(port, host, function () {
-      console.log("Connected");
-    });
+    this.websocket.onopen = () => {
+      this.connection_status = 1;
+    };
 
-    client.on("data", (data) => {
-      // parts = [];
-      // stream.on("data", function (chunk) {
-      //   parts.push(chunk);
-      // });
-      // stream.on("end", function () {
-      //   audio.src = (window.URL || window.webkitURL).createObjectURL(
-      //     new Blob(parts)
-      //   );
-      //   audio.play();
-      // });
-      console.log(data);
-    });
+    this.websocket.onerror = () => {
+      this.connection_status = 2;
+    };
+
+    this.websocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "SONG_INFO") {
+        // load metadata
+        this.update_song_metadata(data);
+      } else {
+        // play audio data
+      }
+    };
+  },
+  methods: {
+    update_song_metadata(song_metadata) {
+      this.song_metadata = song_metadata;
+    },
   },
 };
 </script>
 
-<!-- Add "scoped" attribute to limit CSS to this component only -->
 <style scoped></style>
