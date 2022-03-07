@@ -12,13 +12,15 @@ import eyed3
 # socket stuff
 import json
 from websocket_server import WebsocketServer
-
+from dotenv import load_dotenv
 
 # Constants
-SONG_DIR = "./music"
-SERVER_PORT = 8001
+load_dotenv()
+SONG_DIR = os.getenv('SONG_DIR')
+SERVER_HOST = os.getenv('SERVER_HOST')
+SERVER_PORT = int(os.getenv('SERVER_PORT'))
 
-server = WebsocketServer(port=SERVER_PORT)
+server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
 
 
@@ -47,6 +49,7 @@ def run_radio_server():
             # add 5 seconds of trailing silence
             sound = AudioSegment.from_mp3(
                 f'{SONG_DIR}/{track}') + AudioSegment.silent(duration=5000)
+            channels = sound.channels
             sample_rate = sound.frame_rate
             frame_count = sound.frame_count()
             frame_width = sound.frame_width
@@ -70,6 +73,7 @@ def run_radio_server():
                 "genre": "" if audio_metadata.tag.genre is None else audio_metadata.tag.genre.name,
                 "sample_rate": sample_rate,
                 "frame_count": frame_count,
+                "channels": channels,
                 "frame_width": frame_width,
                 "sample_width": sample_width,
                 "img": encoded_img
@@ -79,26 +83,25 @@ def run_radio_server():
                 "SONG_INFO", 200, extra_info=track_metadata)))
 
             print(
-                f'✨ [Playing {audio_metadata.tag.artist}-{audio_metadata.tag.title}] ✨')
+                f'[✨ Playing {audio_metadata.tag.artist} - {audio_metadata.tag.title} ✨]')
 
-            # create chunks
-            # chunks = [raw_data[i:i+chunk_size]
-            #           for i in range(0, len(raw_data), chunk_size)]
-
-            chunks = make_chunks(sound, 2000)
+            chunks = make_chunks(sound, 5000)
 
             for i in range(len(chunks)):
-                # broadcast chunk data
-                print(
-                    f"[Sending chunk {i+1} (size: {len(chunks[i])} b)]")
 
-                try:
-                    server.send_message_to_all(json.dumps(create_message(
-                        "SONG_DATA", 200, extra_info={"bytes": list(chunks[i].raw_data)})))
-                except:
-                    pass
+                if (not len(server.clients)):
+                    print("[No clients connected. Skipping chunk]")
+                else:
+                    print(
+                        f"[Sending chunk {i+1} (size: {len(chunks[i].raw_data)} b) to {len(server.clients)} client(s)]")
 
-                time.sleep(1)  # broadcast throttle
+                    try:
+                        server.send_message_to_all(json.dumps(create_message(
+                            "SONG_DATA", 200, extra_info={"bytes": list(chunks[i].raw_data)})))
+                    except:
+                        pass
+
+                time.sleep(4.5)  # broadcast throttle
 
 
 # called for every client connecting (after handshake)
