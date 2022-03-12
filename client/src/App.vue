@@ -14,10 +14,18 @@ export default {
 </script>
 
 <style>
-@import url("https://fonts.googleapis.com/css2?family=Shippori+Antique+B1&display=swap");
+@font-face {
+  font-family: "Mulish Light";
+  src: url("../assets/Mulish-Light.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Mulish";
+  src: url("../assets/Mulish-Regular.ttf") format("truetype");
+}
 
 #app {
-  font-family: "Shippori Antique B1", sans-serif;
+  font-family: "Mulish";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;

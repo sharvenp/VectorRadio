@@ -3,19 +3,15 @@
     <div
       class="d-flex flex-column vh-100 justify-content-center align-items-center"
     >
+      <div
+        v-show="isBuffering"
+        class="spinner-grow text-primary buffer-spinner"
+      ></div>
       <div v-if="connectionStatus === 0">
-        <div
-          class="spinner-border text-primary load-spinner"
-          role="status"
-        ></div>
+        <div class="spinner-border text-primary load-spinner"></div>
       </div>
-      <div v-else-if="connectionStatus === 1">
-        <button type="button" class="btn btn-primary tune-in" @click="tuneIn">
-          Tune In
-        </button>
-      </div>
-      <div v-else-if="connectionStatus === 2" class="w-100">
-        <img class="album-art" :src="songMetadata['img']" width="300" />
+      <div v-else-if="connectionStatus === 1" class="w-100">
+        <img class="album-art" :src="songMetadata['img']" />
         <h1 class="title mt-5 text-truncate">{{ songMetadata["title"] }}</h1>
         <h3 class="artist text-truncate">
           {{ songMetadata["artist"] }}
@@ -53,7 +49,7 @@ export default {
       audioContext: undefined,
       gainNode: undefined,
       isPlaying: false,
-      isTunedIn: false,
+      isBuffering: false,
       volume: 1000,
     };
   },
@@ -89,9 +85,11 @@ export default {
     tuneIn() {
       this.connectionStatus = 2;
     },
+
     updateSongMetadata(songMetadata) {
       this.songMetadata = songMetadata;
     },
+
     play() {
       if (!this.songMetadata) {
         return;
@@ -111,6 +109,7 @@ export default {
       source.onended = this.play;
       source.start();
     },
+
     createNextAudioBuffer(buffer) {
       // 16-bit, so it is twice the length
       const frameCount = buffer.length / 2;
@@ -131,9 +130,15 @@ export default {
 
       this.audioBuffers.push(audioBuffer);
       if (!this.isPlaying) {
-        this.play();
+        if (this.audioBuffers.length > 2) {
+          this.isBuffering = false;
+          this.play();
+        } else {
+          this.isBuffering = true;
+        }
       }
     },
+
     onVolumeChange() {
       this.gainNode.gain.setValueAtTime(
         this.volume / 1000,
@@ -146,8 +151,14 @@ export default {
 
 <style scoped>
 .load-spinner {
-  width: 25vh;
-  height: 25vh;
+  width: 20vh;
+  height: 20vh;
+  border-width: 5px;
+}
+
+.buffer-spinner {
+  position: absolute;
+  top: 10vh;
 }
 
 .tune-in {

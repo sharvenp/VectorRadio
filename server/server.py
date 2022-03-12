@@ -19,6 +19,8 @@ load_dotenv()
 SONG_DIR = os.getenv('SONG_DIR')
 SERVER_HOST = os.getenv('SERVER_HOST')
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
+CHUNK_SIZE_MS = 2000
+THROTTLE_MS = 1500
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
@@ -32,13 +34,14 @@ def create_message(message, code, extra_info={}):
 
 def run_radio_server():
 
-    print(f'[Radio server started]')
+    print(f'Radio server started')
+    first_send = True
 
     while True:
 
-        print("[Loading tracks...]")
+        print("Loading tracks...")
         tracks = os.listdir(SONG_DIR)
-        print(f"[Loaded {len(tracks)} track(s)]")
+        print(f"Loaded {len(tracks)} track(s)")
 
         # shuffle all tracks
         random.shuffle(tracks)
@@ -83,17 +86,19 @@ def run_radio_server():
                 "SONG_INFO", 200, extra_info=track_metadata)))
 
             print(
-                f'[✨ Playing {audio_metadata.tag.artist} - {audio_metadata.tag.title} ✨]')
+                f'✨ Playing {audio_metadata.tag.artist} - {audio_metadata.tag.title} ✨')
 
-            chunks = make_chunks(sound, 5000)
+            time.sleep(THROTTLE_MS / 1000)
+
+            chunks = make_chunks(sound, CHUNK_SIZE_MS)
 
             for i in range(len(chunks)):
 
                 if (not len(server.clients)):
-                    print("[No clients connected. Skipping chunk]")
+                    print("No clients connected. Skipping chunk")
                 else:
                     print(
-                        f"[Sending chunk {i+1} (size: {len(chunks[i].raw_data)} b) to {len(server.clients)} client(s)]")
+                        f"Sending chunk {i+1} (size: {len(chunks[i].raw_data)} b) to {len(server.clients)} client(s)")
 
                     try:
                         server.send_message_to_all(json.dumps(create_message(
@@ -101,12 +106,15 @@ def run_radio_server():
                     except:
                         pass
 
-                time.sleep(4.5)  # broadcast throttle
+                # broadcast throttle
+                time.sleep((THROTTLE_MS / 1000) +
+                           (int(not first_send) * (CHUNK_SIZE_MS - THROTTLE_MS) / 1000))
+                first_send = False
 
 
 # called for every client connecting (after handshake)
 def new_client(client, _):
-    print(f"[Client {client['id']} connected]")
+    print(f"Client {client['id']} connected")
     global track_metadata
     server.send_message(client, json.dumps(create_message(
         "SONG_INFO", 200, extra_info=track_metadata)))
@@ -114,12 +122,12 @@ def new_client(client, _):
 
 # called for every client disconnecting
 def client_left(client, _):
-    print(f"[Client {client['id']} disconnected]")
+    print(f"Client {client['id']} disconnected")
 
 
 def main():
     print("********** Vector Radio **********")
-    print("[Starting server...]")
+    print("Starting server...")
 
     server.set_fn_new_client(new_client)
     server.set_fn_client_left(client_left)
@@ -129,7 +137,7 @@ def main():
     radio_thread.start()
 
     server.run_forever()
-    print("[Server terminated]")
+    print("Server terminated")
 
 
 if __name__ == "__main__":
