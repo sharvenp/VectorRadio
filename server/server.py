@@ -1,29 +1,37 @@
 
-# audio stuff
-import base64
+# system
 import os
 import threading
+from datetime import datetime
 import time
 import random
+import base64
+
+# audio
 from pydub import AudioSegment
 from pydub.utils import make_chunks
 import eyed3
 
-# socket stuff
+# sockets
 import json
 from websocket_server import WebsocketServer
 from dotenv import load_dotenv
 
-# Constants
+# constants
 load_dotenv()
 SONG_DIR = os.getenv('SONG_DIR')
 SERVER_HOST = os.getenv('SERVER_HOST')
+# SERVER_HOST = '0.0.0.0'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
-CHUNK_SIZE_MS = 2000
+CHUNK_SIZE_MS = 3000
 THROTTLE_MS = 1500
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
+
+
+def log(message):
+    print(f"[{datetime.now()}] {message}")
 
 
 def create_message(message, code, extra_info={}):
@@ -34,14 +42,14 @@ def create_message(message, code, extra_info={}):
 
 def run_radio_server():
 
-    print(f'Radio server started')
+    log(f'Radio server started')
     first_send = True
 
     while True:
 
-        print("Loading tracks...")
+        log("Loading tracks...")
         tracks = os.listdir(SONG_DIR)
-        print(f"Loaded {len(tracks)} track(s)")
+        log(f"Loaded {len(tracks)} track(s)")
 
         # shuffle all tracks
         random.shuffle(tracks)
@@ -85,28 +93,38 @@ def run_radio_server():
             server.send_message_to_all(json.dumps(create_message(
                 "SONG_INFO", 200, extra_info=track_metadata)))
 
-            print(
-                f'✨ Playing {audio_metadata.tag.artist} - {audio_metadata.tag.title} ✨')
+            log(
+                f'✨ Playing {audio_metadata.tag.artist} - [{audio_metadata.tag.title}] ✨')
 
+            # pause a bit before streaming next song
             time.sleep(THROTTLE_MS / 1000)
 
             chunks = make_chunks(sound, CHUNK_SIZE_MS)
-
             for i in range(len(chunks)):
 
+                # convert data to 16-bit PCM
+                data = chunks[i].raw_data
+                pcm16_signed_integers = []
+                for sample_index in range(len(data)//2):
+                    sample = int.from_bytes(
+                        data[sample_index * 2: sample_index * 2 + 2], 'little', signed=True)
+                    pcm16_signed_integers.append(sample / 32768)
+
                 if (not len(server.clients)):
-                    print("No clients connected. Skipping chunk")
+                    log("No clients connected...")
                 else:
-                    print(
-                        f"Sending chunk {i+1} (size: {len(chunks[i].raw_data)} b) to {len(server.clients)} client(s)")
+                    log(
+                        f"Sending chunk {i+1} ({len(pcm16_signed_integers)}) to {len(server.clients)} client(s)")
 
                     try:
+                        # server.send_message_to_all(json.dumps(create_message(
+                        #     "SONG_DATA", 200, extra_info={"bytes": list(chunks[i].raw_data)})))
                         server.send_message_to_all(json.dumps(create_message(
-                            "SONG_DATA", 200, extra_info={"bytes": list(chunks[i].raw_data)})))
+                            "SONG_DATA", 200, extra_info={"bytes": pcm16_signed_integers})))
                     except:
                         pass
 
-                # broadcast throttle
+                # broadcast throttle to ensure new clients can be synced
                 time.sleep((THROTTLE_MS / 1000) +
                            (int(not first_send) * (CHUNK_SIZE_MS - THROTTLE_MS) / 1000))
                 first_send = False
@@ -114,7 +132,7 @@ def run_radio_server():
 
 # called for every client connecting (after handshake)
 def new_client(client, _):
-    print(f"Client {client['id']} connected")
+    log(f"Client {client['id']} connected")
     global track_metadata
     server.send_message(client, json.dumps(create_message(
         "SONG_INFO", 200, extra_info=track_metadata)))
@@ -122,12 +140,20 @@ def new_client(client, _):
 
 # called for every client disconnecting
 def client_left(client, _):
-    print(f"Client {client['id']} disconnected")
+    log(f"Client {client['id']} disconnected")
 
 
 def main():
-    print("********** Vector Radio **********")
-    print("Starting server...")
+    print("""
+    _    __             __                  __  ___              _
+    | |  / /___   _____ / /_ ____   _____   /  |/  /__  __ _____ (_)_____
+    | | / // _ \ / ___// __// __ \ / ___/  / /|_/ // / / // ___// // ___/
+    | |/ //  __// /__ / /_ / /_/ // /     / /  / // /_/ /(__  )/ // /__
+    |___/ \___/ \___/ \__/ \____//_/     /_/  /_/ \__,_//____//_/ \___/
+
+    """)
+
+    log("Starting server...")
 
     server.set_fn_new_client(new_client)
     server.set_fn_client_left(client_left)
@@ -137,7 +163,7 @@ def main():
     radio_thread.start()
 
     server.run_forever()
-    print("Server terminated")
+    log("Server terminated")
 
 
 if __name__ == "__main__":

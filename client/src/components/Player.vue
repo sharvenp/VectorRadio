@@ -11,26 +11,48 @@
         <div class="spinner-border text-primary load-spinner"></div>
       </div>
       <div v-else-if="connectionStatus === 1" class="w-100">
-        <img class="album-art" :src="songMetadata['img']" />
+        <img class="album-art shadow" :src="songMetadata['img']" />
         <h1 class="title mt-5 text-truncate">{{ songMetadata["title"] }}</h1>
         <h3 class="artist text-truncate">
           {{ songMetadata["artist"] }}
         </h3>
-        <input
-          type="range"
-          class="form-range volume-slider mt-3"
-          v-model="volume"
-          min="1"
-          max="1000"
-          step="1"
-          @change="onVolumeChange"
-        />
+        <button type="button" class="btn btn-dark mt-3" @click="toggleMute">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="currentColor"
+            class="bi bi-volume-mute vol-icon"
+            viewBox="0 0 16 16"
+            v-if="isMuted"
+          >
+            <path
+              d="M6.717 3.55A.5.5 0 0 1 7 4v8a.5.5 0 0 1-.812.39L3.825 10.5H1.5A.5.5 0 0 1 1 10V6a.5.5 0 0 1 .5-.5h2.325l2.363-1.89a.5.5 0 0 1 .529-.06zM6 5.04 4.312 6.39A.5.5 0 0 1 4 6.5H2v3h2a.5.5 0 0 1 .312.11L6 10.96V5.04zm7.854.606a.5.5 0 0 1 0 .708L12.207 8l1.647 1.646a.5.5 0 0 1-.708.708L11.5 8.707l-1.646 1.647a.5.5 0 0 1-.708-.708L10.793 8 9.146 6.354a.5.5 0 1 1 .708-.708L11.5 7.293l1.646-1.647a.5.5 0 0 1 .708 0z"
+            />
+          </svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="currentColor"
+            class="bi bi-volume-up vol-icon"
+            viewBox="0 0 16 16"
+            v-else
+          >
+            <path
+              d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"
+            />
+            <path
+              d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"
+            />
+            <path
+              d="M10.025 8a4.486 4.486 0 0 1-1.318 3.182L8 10.475A3.489 3.489 0 0 0 9.025 8c0-.966-.392-1.841-1.025-2.475l.707-.707A4.486 4.486 0 0 1 10.025 8zM7 4a.5.5 0 0 0-.812-.39L3.825 5.5H1.5A.5.5 0 0 0 1 6v4a.5.5 0 0 0 .5.5h2.325l2.363 1.89A.5.5 0 0 0 7 12V4zM4.312 6.39 6 5.04v5.92L4.312 9.61A.5.5 0 0 0 4 9.5H2v-3h2a.5.5 0 0 0 .312-.11z"
+            />
+          </svg>
+        </button>
       </div>
       <div v-else-if="connectionStatus === -1">
+        <h1>¯\_(ツ)_/¯</h1>
         <h1>Could not connect to <b>VectorRadio</b> server</h1>
         <p>
           Please make sure the server is set up properly and refresh the page to
-          try again.
+          try connecting again.
         </p>
       </div>
     </div>
@@ -50,17 +72,18 @@ export default {
       gainNode: undefined,
       isPlaying: false,
       isBuffering: false,
-      volume: 1000,
+      isMuted: false,
     };
   },
   mounted() {
     this.audioContext = new (window.AudioContext ||
       window.webkitAudioContext)();
     this.gainNode = this.audioContext.createGain();
-    this.gainNode.gain.value = this.volume / 1000;
+    this.gainNode.gain.value = 1;
     this.gainNode.connect(this.audioContext.destination);
 
     this.websocket = new WebSocket(process.env.VUE_APP_SERVER_ADDRESS);
+    // this.websocket = new WebSocket("ws://localhost:8001/");
 
     this.websocket.onopen = () => {
       this.connectionStatus = 1;
@@ -112,25 +135,33 @@ export default {
 
     createNextAudioBuffer(buffer) {
       // 16-bit, so it is twice the length
-      const frameCount = buffer.length / 2;
-      let audioBuffer = this.audioContext.createBuffer(
+      // let audioBuffer = this.audioContext.createBuffer(
+      //   this.songMetadata.channels,
+      //   buffer.length,
+      //   this.songMetadata.sample_rate * 3
+      // );
+
+      // for (let channel = 0; channel < this.songMetadata.channels; channel++) {
+      //   let nowBuffering = audioBuffer.getChannelData(channel);
+      //   for (let i = 0; i < buffer.length; i++) {
+      //     nowBuffering[i] = buffer[i];
+      //   }
+      // }
+
+      const floatBuffer = new Float32Array(buffer);
+
+      const audioBuffer = this.audioContext.createBuffer(
         this.songMetadata.channels,
-        frameCount,
+        floatBuffer.length,
         this.songMetadata.sample_rate * 2
       );
-
-      for (let channel = 0; channel < this.songMetadata.channels; channel++) {
-        let nowBuffering = audioBuffer.getChannelData(channel);
-        for (let i = 0; i < frameCount; i++) {
-          var word = (buffer[i * 2] & 0xff) + ((buffer[i * 2 + 1] & 0xff) << 8);
-          let signedWord = ((word + 32768.0) % 65536.0) - 32768.0;
-          nowBuffering[i] = signedWord / 32768.0;
-        }
-      }
+      audioBuffer.copyToChannel(floatBuffer, 0);
+      audioBuffer.copyToChannel(floatBuffer, 1);
 
       this.audioBuffers.push(audioBuffer);
+
       if (!this.isPlaying) {
-        if (this.audioBuffers.length > 2) {
+        if (this.audioBuffers.length > 4) {
           this.isBuffering = false;
           this.play();
         } else {
@@ -139,9 +170,10 @@ export default {
       }
     },
 
-    onVolumeChange() {
+    toggleMute() {
+      this.isMuted = !this.isMuted;
       this.gainNode.gain.setValueAtTime(
-        this.volume / 1000,
+        this.isMuted ? 0 : 1,
         this.audioContext.currentTime
       );
     },
@@ -150,9 +182,14 @@ export default {
 </script>
 
 <style scoped>
+.vol-icon {
+  width: 2rem;
+  height: 2rem;
+}
+
 .load-spinner {
-  width: 20vh;
-  height: 20vh;
+  width: 10vh;
+  height: 10vh;
   border-width: 5px;
 }
 
