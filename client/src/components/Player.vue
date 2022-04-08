@@ -128,6 +128,7 @@ export default {
         return;
       }
 
+      // get the next buffer
       const nextBuffer = this.audioBuffers.shift();
       this.isPlaying = true;
 
@@ -136,6 +137,7 @@ export default {
         return;
       }
 
+      // load the next buffer onto the audio buffer
       let source = this.audioContext.createBufferSource();
       source.buffer = nextBuffer;
       source.loop = false;
@@ -151,6 +153,7 @@ export default {
         this.songMetadata.sample_rate
       );
 
+      // parse the channel buffers
       for (let channel = 0; channel < this.songMetadata.channels; channel++) {
         let nowBuffering = audioBuffer.getChannelData(channel);
         for (let i = 0; i < buffer[channel].length / 2; i++) {
@@ -165,7 +168,8 @@ export default {
       this.audioBuffers.push(audioBuffer);
 
       if (!this.isPlaying) {
-        if (this.audioBuffers.length > 4) {
+        // buffer at least two segments
+        if (this.audioBuffers.length > 2) {
           this.isBuffering = false;
           this.play();
         } else {

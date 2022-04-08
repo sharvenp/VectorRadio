@@ -24,7 +24,7 @@ SERVER_HOST = os.getenv('SERVER_HOST')
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
 CHUNK_SIZE_MS = 2000
-THROTTLE_MS = 1500
+THROTTLE_MS = 1000
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
