@@ -21,9 +21,9 @@ from dotenv import load_dotenv
 load_dotenv()
 SONG_DIR = os.getenv('SONG_DIR')
 SERVER_HOST = os.getenv('SERVER_HOST')
-# SERVER_HOST = '0.0.0.0'  # use this for local hosting
+# SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
-CHUNK_SIZE_MS = 3000
+CHUNK_SIZE_MS = 2000
 THROTTLE_MS = 1500
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
@@ -102,25 +102,18 @@ def run_radio_server():
             chunks = make_chunks(sound, CHUNK_SIZE_MS)
             for i in range(len(chunks)):
 
-                # convert data to 16-bit PCM
-                data = chunks[i].raw_data
-                pcm16_signed_integers = []
-                for sample_index in range(len(data)//2):
-                    sample = int.from_bytes(
-                        data[sample_index * 2: sample_index * 2 + 2], 'little', signed=True)
-                    pcm16_signed_integers.append(sample / 32768)
+                datas = chunks[i].split_to_mono()
+                data_sum = sum([len(d.raw_data) for d in datas])
 
                 if (not len(server.clients)):
                     log("No clients connected...")
                 else:
                     log(
-                        f"Sending chunk {i+1} ({len(pcm16_signed_integers)}) to {len(server.clients)} client(s)")
+                        f"Sending chunk {i+1} ({data_sum} B) to {len(server.clients)} client(s)")
 
                     try:
-                        # server.send_message_to_all(json.dumps(create_message(
-                        #     "SONG_DATA", 200, extra_info={"bytes": list(chunks[i].raw_data)})))
                         server.send_message_to_all(json.dumps(create_message(
-                            "SONG_DATA", 200, extra_info={"bytes": pcm16_signed_integers})))
+                            "SONG_DATA", 200, extra_info={"bytes": [list(d.raw_data) for d in datas]})))
                     except:
                         pass
 

@@ -111,6 +111,16 @@ export default {
 
     updateSongMetadata(songMetadata) {
       this.songMetadata = songMetadata;
+      console.log({
+        title: songMetadata.title,
+        artist: songMetadata.artist,
+        album: songMetadata.album,
+        sample_rate: songMetadata.sample_rate,
+        frame_count: songMetadata.frame_count,
+        channels: songMetadata.channels,
+        frame_width: songMetadata.frame_width,
+        sample_width: songMetadata.sample_width,
+      });
     },
 
     play() {
@@ -128,35 +138,29 @@ export default {
 
       let source = this.audioContext.createBufferSource();
       source.buffer = nextBuffer;
+      source.loop = false;
       source.connect(this.gainNode);
       source.onended = this.play;
       source.start();
     },
 
     createNextAudioBuffer(buffer) {
-      // 16-bit, so it is twice the length
-      // let audioBuffer = this.audioContext.createBuffer(
-      //   this.songMetadata.channels,
-      //   buffer.length,
-      //   this.songMetadata.sample_rate * 3
-      // );
-
-      // for (let channel = 0; channel < this.songMetadata.channels; channel++) {
-      //   let nowBuffering = audioBuffer.getChannelData(channel);
-      //   for (let i = 0; i < buffer.length; i++) {
-      //     nowBuffering[i] = buffer[i];
-      //   }
-      // }
-
-      const floatBuffer = new Float32Array(buffer);
-
       const audioBuffer = this.audioContext.createBuffer(
         this.songMetadata.channels,
-        floatBuffer.length,
-        this.songMetadata.sample_rate * 2
+        buffer[0].length / 2,
+        this.songMetadata.sample_rate
       );
-      audioBuffer.copyToChannel(floatBuffer, 0);
-      audioBuffer.copyToChannel(floatBuffer, 1);
+
+      for (let channel = 0; channel < this.songMetadata.channels; channel++) {
+        let nowBuffering = audioBuffer.getChannelData(channel);
+        for (let i = 0; i < buffer[channel].length / 2; i++) {
+          var word =
+            (buffer[channel][i * 2] & 0xff) +
+            ((buffer[channel][i * 2 + 1] & 0xff) << 8);
+          let signedWord = ((word + 32768.0) % 65536.0) - 32768.0;
+          nowBuffering[i] = signedWord / 32768.0;
+        }
+      }
 
       this.audioBuffers.push(audioBuffer);
 
