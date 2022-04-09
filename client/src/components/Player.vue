@@ -67,9 +67,10 @@ export default {
       connectionStatus: 0,
       websocket: undefined,
       songMetadata: {},
-      audioBuffers: [],
+      audioBufferSources: [],
       audioContext: undefined,
       gainNode: undefined,
+      nextAudioBufferSource: undefined,
       isPlaying: false,
       isBuffering: false,
       isMuted: false,
@@ -100,7 +101,7 @@ export default {
         this.updateSongMetadata(data);
       } else {
         // push data to byteBuffer
-        this.createNextAudioBuffer(data.bytes);
+        this.createNextAudioBuffer(data.rawData);
       }
     };
   },
@@ -128,48 +129,60 @@ export default {
         return;
       }
 
-      // get the next buffer
-      const nextBuffer = this.audioBuffers.shift();
-      this.isPlaying = true;
+      // start playing the next audio buffer
+      if (this.nextAudioBufferSource) {
+        this.nextAudioBufferSource.start();
+      }
 
-      if (!nextBuffer) {
+      // get the next buffer
+      this.nextAudioBufferSource = this.audioBufferSources.shift();
+      this.isPlaying = true;
+      if (!this.nextAudioBufferSource) {
         this.isPlaying = false;
         return;
       }
-
-      // load the next buffer onto the audio buffer
-      let source = this.audioContext.createBufferSource();
-      source.buffer = nextBuffer;
-      source.loop = false;
-      source.connect(this.gainNode);
-      source.onended = this.play;
-      source.start();
     },
 
     createNextAudioBuffer(buffer) {
       const audioBuffer = this.audioContext.createBuffer(
         this.songMetadata.channels,
-        buffer[0].length / 2,
+        buffer[0].length / this.songMetadata.sample_width,
         this.songMetadata.sample_rate
       );
 
       // parse the channel buffers
       for (let channel = 0; channel < this.songMetadata.channels; channel++) {
         let nowBuffering = audioBuffer.getChannelData(channel);
-        for (let i = 0; i < buffer[channel].length / 2; i++) {
+        for (
+          let i = 0;
+          i < buffer[channel].length / this.songMetadata.sample_width;
+          i++
+        ) {
+          // hard-coded for 2-byte samples for now
           var word =
-            (buffer[channel][i * 2] & 0xff) +
-            ((buffer[channel][i * 2 + 1] & 0xff) << 8);
+            (buffer[channel][i * this.songMetadata.sample_width] & 0xff) +
+            ((buffer[channel][i * this.songMetadata.sample_width + 1] & 0xff) <<
+              8);
           let signedWord = ((word + 32768.0) % 65536.0) - 32768.0;
           nowBuffering[i] = signedWord / 32768.0;
         }
       }
 
-      this.audioBuffers.push(audioBuffer);
+      let nextSource = this.audioContext.createBufferSource();
+      nextSource.buffer = audioBuffer;
+      nextSource.loop = false;
+      nextSource.connect(this.gainNode);
+      nextSource.onended = this.play;
+
+      if (!this.nextAudioBufferSource) {
+        this.nextAudioBufferSource = nextSource;
+      } else {
+        this.audioBufferSources.push(nextSource);
+      }
 
       if (!this.isPlaying) {
         // buffer at least two segments
-        if (this.audioBuffers.length > 2) {
+        if (this.audioBufferSources.length > 2) {
           this.isBuffering = false;
           this.play();
         } else {

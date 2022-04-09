@@ -23,8 +23,8 @@ SONG_DIR = os.getenv('SONG_DIR')
 SERVER_HOST = os.getenv('SERVER_HOST')
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
-CHUNK_SIZE_MS = 2000
-THROTTLE_MS = 1000
+CHUNK_SIZE_MS = 1000
+THROTTLE_MS = 500
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
@@ -113,7 +113,7 @@ def run_radio_server():
 
                     try:
                         server.send_message_to_all(json.dumps(create_message(
-                            "SONG_DATA", 200, extra_info={"bytes": [list(d.raw_data) for d in datas]})))
+                            "SONG_DATA", 200, extra_info={"rawData": [list(d.raw_data) for d in datas]})))
                     except:
                         pass
 
@@ -138,11 +138,11 @@ def client_left(client, _):
 
 def main():
     print("""
-    _    __             __                  __  ___              _
-    | |  / /___   _____ / /_ ____   _____   /  |/  /__  __ _____ (_)_____
-    | | / // _ \ / ___// __// __ \ / ___/  / /|_/ // / / // ___// // ___/
-    | |/ //  __// /__ / /_ / /_/ // /     / /  / // /_/ /(__  )/ // /__
-    |___/ \___/ \___/ \__/ \____//_/     /_/  /_/ \__,_//____//_/ \___/
+    _    __          __                ____            ___
+    | |  / /__  _____/ /_____  _____   / __ \____ _____/ (_)___
+    | | / / _ \/ ___/ __/ __ \/ ___/  / /_/ / __ `/ __  / / __ \\
+    | |/ /  __/ /__/ /_/ /_/ / /     / _, _/ /_/ / /_/ / / /_/ /
+    |___/\___/\___/\__/\____/_/     /_/ |_|\__,_/\__,_/_/\____/
 
     """)
 
