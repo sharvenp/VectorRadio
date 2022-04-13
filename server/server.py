@@ -7,7 +7,7 @@ import time
 import random
 import base64
 
-# audio
+# audio & mp3
 from pydub import AudioSegment
 from pydub.utils import make_chunks
 import eyed3
@@ -24,7 +24,6 @@ SERVER_HOST = os.getenv('SERVER_HOST')
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
 CHUNK_SIZE_MS = 1000
-THROTTLE_MS = 500
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
@@ -43,7 +42,6 @@ def create_message(message, code, extra_info={}):
 def run_radio_server():
 
     log(f'Radio server started')
-    first_send = True
 
     while True:
 
@@ -57,9 +55,9 @@ def run_radio_server():
         for track in tracks:
 
             # load track
-            # add 5 seconds of trailing silence
+            # add 3 seconds of trailing silence
             sound = AudioSegment.from_mp3(
-                f'{SONG_DIR}/{track}') + AudioSegment.silent(duration=5000)
+                f'{SONG_DIR}/{track}') + AudioSegment.silent(duration=3000)
             channels = sound.channels
             sample_rate = sound.frame_rate
             frame_count = sound.frame_count()
@@ -94,33 +92,43 @@ def run_radio_server():
                 "SONG_INFO", 200, extra_info=track_metadata)))
 
             log(
-                f'✨ Playing {audio_metadata.tag.artist} - [{audio_metadata.tag.title}] ✨')
-
-            # pause a bit before streaming next song
-            time.sleep(THROTTLE_MS / 1000)
+                f'✨ Playing {audio_metadata.tag.artist} - [{audio_metadata.tag.title}] ✨\n')
 
             chunks = make_chunks(sound, CHUNK_SIZE_MS)
             for i in range(len(chunks)):
 
-                datas = chunks[i].split_to_mono()
-                data_sum = sum([len(d.raw_data) for d in datas])
+                # split each chunk into individual channels
+                channel_datas = chunks[i].split_to_mono()
+                data_sum = sum([len(d.raw_data) for d in channel_datas])
+                processed_datas = []
+
+                # handle PCM conversion on the server
+                for c in range(channels):
+                    processed_data = []
+                    channel_data = list(channel_datas[c].raw_data)
+                    for i in range(len(channel_data) // sample_width):
+                        # handles only 2-byte samples for now
+                        word = (channel_data[i * sample_width] & 0xff) + \
+                            ((channel_data[i * sample_width + 1] & 0xff) << 8)
+                        signedWord = ((word + 32768.0) % 65536.0) - 32768.0
+                        processed_data.append(signedWord / 32768.0)
+                    processed_datas.append(processed_data)
 
                 if (not len(server.clients)):
                     log("No clients connected...")
                 else:
                     log(
-                        f"Sending chunk {i+1} ({data_sum} B) to {len(server.clients)} client(s)")
+                        f"Sending chunk {i+1} ({data_sum} bytes) to {len(server.clients)} client(s)")
 
                     try:
                         server.send_message_to_all(json.dumps(create_message(
-                            "SONG_DATA", 200, extra_info={"rawData": [list(d.raw_data) for d in datas]})))
+                            "SONG_DATA", 200, extra_info={"rawData": processed_datas})))
                     except:
-                        pass
+                        pass  # ¯\_(ツ)_/¯
 
                 # broadcast throttle to ensure new clients can be synced
-                time.sleep((THROTTLE_MS / 1000) +
-                           (int(not first_send) * (CHUNK_SIZE_MS - THROTTLE_MS) / 1000))
-                first_send = False
+                time.sleep(
+                    (((int(i > 0) * CHUNK_SIZE_MS) + CHUNK_SIZE_MS) // 2) / 1000)
 
 
 # called for every client connecting (after handshake)
@@ -138,7 +146,7 @@ def client_left(client, _):
 
 def main():
     print("""
-    _    __          __                ____            ___
+     _    __          __                ____            ___
     | |  / /__  _____/ /_____  _____   / __ \____ _____/ (_)___
     | | / / _ \/ ___/ __/ __ \/ ___/  / /_/ / __ `/ __  / / __ \\
     | |/ /  __/ /__/ /_/ /_/ / /     / _, _/ /_/ / /_/ / / /_/ /

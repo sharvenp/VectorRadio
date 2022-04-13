@@ -49,8 +49,10 @@
       </div>
       <div v-else-if="connectionStatus === -1">
         <h1>¯\_(ツ)_/¯</h1>
-        <h1>Could not connect to <b>VectorRadio</b> server</h1>
-        <p>
+        <h1 class="ps-3 pe-3">
+          Could not connect to <b>VectorRadio</b> server
+        </h1>
+        <p class="ps-5 pe-5">
           Please make sure the server is set up properly and refresh the page to
           try connecting again.
         </p>
@@ -67,13 +69,13 @@ export default {
       connectionStatus: 0,
       websocket: undefined,
       songMetadata: {},
-      audioBufferSources: [],
+      buffers: [],
       audioContext: undefined,
       gainNode: undefined,
-      nextAudioBufferSource: undefined,
       isPlaying: false,
       isBuffering: false,
       isMuted: false,
+      minBufferSize: 4,
     };
   },
   mounted() {
@@ -129,60 +131,59 @@ export default {
         return;
       }
 
-      // start playing the next audio buffer
-      if (this.nextAudioBufferSource) {
-        this.nextAudioBufferSource.start();
-      }
-
       // get the next buffer
-      this.nextAudioBufferSource = this.audioBufferSources.shift();
+      let nextChannelBuffers = this.buffers.shift();
       this.isPlaying = true;
-      if (!this.nextAudioBufferSource) {
+      if (!nextChannelBuffers) {
         this.isPlaying = false;
         return;
       }
+
+      let nextSource = this.audioContext.createBufferSource();
+      var nextBuffer = this.audioContext.createBuffer(
+        this.songMetadata.channels,
+        nextChannelBuffers[0].length,
+        this.songMetadata.sample_rate
+      );
+      for (let channel = 0; channel < this.songMetadata.channels; channel++) {
+        nextBuffer.copyToChannel(nextChannelBuffers[channel], channel, 0);
+      }
+      nextSource.buffer = nextBuffer;
+      nextSource.connect(this.gainNode);
+      nextSource.onended = this.play;
+      nextSource.start();
     },
 
     createNextAudioBuffer(buffer) {
-      const audioBuffer = this.audioContext.createBuffer(
-        this.songMetadata.channels,
-        buffer[0].length / this.songMetadata.sample_width,
-        this.songMetadata.sample_rate
-      );
+      let channelBuffers = [];
 
       // parse the channel buffers
       for (let channel = 0; channel < this.songMetadata.channels; channel++) {
-        let nowBuffering = audioBuffer.getChannelData(channel);
-        for (
-          let i = 0;
-          i < buffer[channel].length / this.songMetadata.sample_width;
-          i++
-        ) {
-          // hard-coded for 2-byte samples for now
-          var word =
-            (buffer[channel][i * this.songMetadata.sample_width] & 0xff) +
-            ((buffer[channel][i * this.songMetadata.sample_width + 1] & 0xff) <<
-              8);
-          let signedWord = ((word + 32768.0) % 65536.0) - 32768.0;
-          nowBuffering[i] = signedWord / 32768.0;
-        }
+        let floatBuffer = new Float32Array(buffer[channel]);
+        // let floatBuffer = new Float32Array(
+        //   buffer[channel].length / this.songMetadata.sample_width
+        // );
+        // for (
+        //   let i = 0;
+        //   i < buffer[channel].length / this.songMetadata.sample_width;
+        //   i++
+        // ) {
+        //   // hard-coded for 2-byte samples for now
+        //   var word =
+        //     (buffer[channel][i * this.songMetadata.sample_width] & 0xff) +
+        //     ((buffer[channel][i * this.songMetadata.sample_width + 1] & 0xff) <<
+        //       8);
+        //   let signedWord = ((word + 32768.0) % 65536.0) - 32768.0;
+        //   floatBuffer[i] = signedWord / 32768.0;
+        // }
+        channelBuffers.push(floatBuffer);
       }
 
-      let nextSource = this.audioContext.createBufferSource();
-      nextSource.buffer = audioBuffer;
-      nextSource.loop = false;
-      nextSource.connect(this.gainNode);
-      nextSource.onended = this.play;
-
-      if (!this.nextAudioBufferSource) {
-        this.nextAudioBufferSource = nextSource;
-      } else {
-        this.audioBufferSources.push(nextSource);
-      }
+      this.buffers.push(channelBuffers);
 
       if (!this.isPlaying) {
         // buffer at least two segments
-        if (this.audioBufferSources.length > 2) {
+        if (this.buffers.length > this.minBufferSize) {
           this.isBuffering = false;
           this.play();
         } else {
