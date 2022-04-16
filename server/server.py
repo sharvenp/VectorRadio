@@ -24,6 +24,7 @@ SERVER_HOST = os.getenv('SERVER_HOST')
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
 CHUNK_SIZE_MS = 1000
+ZERO_POINT_TOLERANCE = 0.0005
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 track_metadata = {}
@@ -45,7 +46,7 @@ def run_radio_server():
 
     while True:
 
-        log("Loading tracks...")
+        log("Loading tracks ...")
         tracks = os.listdir(SONG_DIR)
         log(f"Loaded {len(tracks)} track(s)")
 
@@ -56,8 +57,7 @@ def run_radio_server():
 
             # load track
             # add 3 seconds of trailing silence
-            sound = AudioSegment.from_mp3(
-                f'{SONG_DIR}/{track}') + AudioSegment.silent(duration=3000)
+            sound = AudioSegment.from_mp3(f'{SONG_DIR}/{track}')
             channels = sound.channels
             sample_rate = sound.frame_rate
             frame_count = sound.frame_count()
@@ -92,43 +92,85 @@ def run_radio_server():
                 "SONG_INFO", 200, extra_info=track_metadata)))
 
             log(
-                f'✨ Playing {audio_metadata.tag.artist} - [{audio_metadata.tag.title}] ✨\n')
+                f'✨ Playing {audio_metadata.tag.artist} - [{audio_metadata.tag.title}] ✨')
+
+            log("Generating PCM chunks ...")
 
             chunks = make_chunks(sound, CHUNK_SIZE_MS)
+            pcm_chunks = []
+            print_intervals = [0, 0.25, 0.50, 0.75, 1]
             for i in range(len(chunks)):
+
+                if len(print_intervals) > 0:
+                    percentage = (i+1) / len(chunks)
+                    if percentage >= print_intervals[0]:
+                        log(f'{"{:.0%}".format(percentage)} ({i + 1}/{len(chunks)}) completed')
+                        print_intervals.pop(0)
 
                 # split each chunk into individual channels
                 channel_datas = chunks[i].split_to_mono()
-                data_sum = sum([len(d.raw_data) for d in channel_datas])
-                processed_datas = []
-
+                pcm_chunk = []
                 # handle PCM conversion on the server
                 for c in range(channels):
-                    processed_data = []
-                    channel_data = list(channel_datas[c].raw_data)
-                    for i in range(len(channel_data) // sample_width):
+                    raw_channel_data = list(channel_datas[c].raw_data)
+                    pcm_channel_data = []
+                    for i in range(len(raw_channel_data) // sample_width):
                         # handles only 2-byte samples for now
-                        word = (channel_data[i * sample_width] & 0xff) + \
-                            ((channel_data[i * sample_width + 1] & 0xff) << 8)
+                        word = (raw_channel_data[i * sample_width] & 0xff) + \
+                            ((raw_channel_data[i *
+                             sample_width + 1] & 0xff) << 8)
                         signedWord = ((word + 32768.0) % 65536.0) - 32768.0
-                        processed_data.append(signedWord / 32768.0)
-                    processed_datas.append(processed_data)
+                        pcm_channel_data.append(signedWord / 32768.0)
+                    pcm_chunk.append(pcm_channel_data)
+                pcm_chunks.append(pcm_chunk)
+
+            log("Adjusting for zero-point crossings ...")
+
+            for i in range(len(pcm_chunks) - 1):
+                curr_pcm_chunk = pcm_chunks[i]
+                next_pcm_chunk = pcm_chunks[i+1]
+                zero_point_idx = -1
+                num_samples = sum([len(b) for b in next_pcm_chunk]) // channels
+                for sample_idx in range(num_samples):
+                    if all([abs(pcm_val) <= ZERO_POINT_TOLERANCE for pcm_val in [pcm_channel_samples[sample_idx] for pcm_channel_samples in next_pcm_chunk]]):
+                        zero_point_idx = sample_idx
+                        break
+                if zero_point_idx == -1:
+                    continue
+
+                # append up until zero-point index to current chunk
+                for channel_idx in range(channels):
+                    curr_pcm_chunk[channel_idx].extend(
+                        next_pcm_chunk[channel_idx][:(zero_point_idx + 1)])
+
+                # delete these samples from the next chunk
+                for channel_idx in range(channels):
+                    del next_pcm_chunk[channel_idx][:(zero_point_idx + 1)]
+
+            log("Starting broadcast")
+
+            for i in range(len(pcm_chunks)):
+
+                pcm_chunk = pcm_chunks[i]
+                data_sum = sum([len(b) for b in pcm_chunk])
+                if data_sum == 0:
+                    continue
 
                 if (not len(server.clients)):
-                    log("No clients connected...")
+                    log("No clients connected ...")
                 else:
                     log(
-                        f"Sending chunk {i+1} ({data_sum} bytes) to {len(server.clients)} client(s)")
+                        f"Sending chunk {i+1}/{len(pcm_chunks)} ({data_sum} bytes) to {len(server.clients)} client(s)")
 
                     try:
                         server.send_message_to_all(json.dumps(create_message(
-                            "SONG_DATA", 200, extra_info={"rawData": processed_datas})))
+                            "SONG_DATA", 200, extra_info={"pcm_data": pcm_chunk})))
                     except:
                         pass  # ¯\_(ツ)_/¯
 
                 # broadcast throttle to ensure new clients can be synced
-                time.sleep(
-                    (((int(i > 0) * CHUNK_SIZE_MS) + CHUNK_SIZE_MS) // 2) / 1000)
+                # TODO: upgrade this to also account for drift
+                time.sleep((data_sum / channels) / sample_rate)
 
 
 # called for every client connecting (after handshake)
@@ -154,7 +196,7 @@ def main():
 
     """)
 
-    log("Starting server...")
+    log("Starting server ...")
 
     server.set_fn_new_client(new_client)
     server.set_fn_client_left(client_left)

@@ -1,25 +1,47 @@
 <template>
-  <div>
+  <div :style="{ 'background-color': vibrantColor }">
     <div
       class="d-flex flex-column vh-100 justify-content-center align-items-center"
     >
       <div
         v-show="isBuffering"
-        class="spinner-grow text-primary buffer-spinner"
+        class="spinner-grow buffer-spinner mb-3"
+        :style="{ color: textColor }"
       ></div>
       <div v-if="connectionStatus === 0">
         <div class="spinner-border text-primary load-spinner"></div>
       </div>
       <div v-else-if="connectionStatus === 1" class="w-100">
-        <img class="album-art shadow" :src="songMetadata['img']" />
-        <h1 class="title mt-5 text-truncate">{{ songMetadata["title"] }}</h1>
-        <h3 class="artist text-truncate">
-          {{ songMetadata["artist"] }}
+        <img
+          class="album-art shadow"
+          id="album-img"
+          :src="
+            songMetadata['img'] ||
+            'https://static.vecteezy.com/system/resources/previews/003/674/909/large_2x/music-note-icon-song-melody-tune-flat-symbol-free-free-vector.jpg'
+          "
+          @load="getVibrantColor"
+        />
+        <h1 class="title mt-4 text-truncate" :style="{ color: textColor }">
+          {{ songMetadata["title"] || "[Untitled]" }}
+        </h1>
+        <h2 class="album mt-3 text-truncate" :style="{ color: textColor }">
+          {{ songMetadata["album"] || "[Unknown Album]" }}
+        </h2>
+        <h3 class="artist mt-3 text-truncate" :style="{ color: textColor }">
+          {{ songMetadata["artist"] || "[Unknwon Artist]" }}
         </h3>
-        <button type="button" class="btn btn-dark mt-3" @click="toggleMute">
+        <button
+          type="button"
+          class="btn mt-3 vol-button"
+          :style="{
+            'border-color': textColor,
+            'background-color': vibrantColor,
+          }"
+          @click="toggleMute"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            fill="currentColor"
+            :fill="textColor"
             class="bi bi-volume-mute vol-icon"
             viewBox="0 0 16 16"
             v-if="isMuted"
@@ -30,7 +52,7 @@
           </svg>
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            fill="currentColor"
+            :fill="textColor"
             class="bi bi-volume-up vol-icon"
             viewBox="0 0 16 16"
             v-else
@@ -50,7 +72,7 @@
       <div v-else-if="connectionStatus === -1">
         <h1>¯\_(ツ)_/¯</h1>
         <h1 class="ps-3 pe-3">
-          Could not connect to <b>VectorRadio</b> server
+          Could not connect to <b>Vector Radio</b> server
         </h1>
         <p class="ps-5 pe-5">
           Please make sure the server is set up properly and refresh the page to
@@ -62,6 +84,8 @@
 </template>
 
 <script>
+import Vibrant from "node-vibrant";
+
 export default {
   name: "Player",
   data() {
@@ -75,7 +99,9 @@ export default {
       isPlaying: false,
       isBuffering: false,
       isMuted: false,
-      minBufferSize: 4,
+      minBufferSize: 2,
+      vibrantColor: "#FFFFFF",
+      textColor: "#000000",
     };
   },
   mounted() {
@@ -103,15 +129,11 @@ export default {
         this.updateSongMetadata(data);
       } else {
         // push data to byteBuffer
-        this.createNextAudioBuffer(data.rawData);
+        this.createNextAudioBuffer(data.pcm_data);
       }
     };
   },
   methods: {
-    tuneIn() {
-      this.connectionStatus = 2;
-    },
-
     updateSongMetadata(songMetadata) {
       this.songMetadata = songMetadata;
       console.log({
@@ -160,22 +182,6 @@ export default {
       // parse the channel buffers
       for (let channel = 0; channel < this.songMetadata.channels; channel++) {
         let floatBuffer = new Float32Array(buffer[channel]);
-        // let floatBuffer = new Float32Array(
-        //   buffer[channel].length / this.songMetadata.sample_width
-        // );
-        // for (
-        //   let i = 0;
-        //   i < buffer[channel].length / this.songMetadata.sample_width;
-        //   i++
-        // ) {
-        //   // hard-coded for 2-byte samples for now
-        //   var word =
-        //     (buffer[channel][i * this.songMetadata.sample_width] & 0xff) +
-        //     ((buffer[channel][i * this.songMetadata.sample_width + 1] & 0xff) <<
-        //       8);
-        //   let signedWord = ((word + 32768.0) % 65536.0) - 32768.0;
-        //   floatBuffer[i] = signedWord / 32768.0;
-        // }
         channelBuffers.push(floatBuffer);
       }
 
@@ -199,14 +205,44 @@ export default {
         this.audioContext.currentTime
       );
     },
+
+    getVibrantColor() {
+      const img = document.getElementById("album-img");
+      const vib = new Vibrant(img);
+      vib.getPalette().then(
+        (palette) => {
+          let color = palette.LightMuted;
+          this.vibrantColor = color.hex || "#000000";
+          let r = color.r;
+          let g = color.g;
+          let b = color.b;
+          if (r * 0.299 + g * 0.587 + b * 0.114 > 186) {
+            this.textColor = "#000000";
+          } else {
+            this.textColor = "#FFFFFF";
+          }
+        },
+        (err) => console.log(err)
+      );
+    },
   },
 };
 </script>
 
 <style scoped>
+transition div {
+  transition: background-color 4s;
+}
+
+.vol-button {
+  border-width: 2px;
+  border-radius: 10px;
+  padding: 5px;
+}
+
 .vol-icon {
-  width: 2rem;
-  height: 2rem;
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 .load-spinner {
@@ -220,13 +256,6 @@ export default {
   top: 10vh;
 }
 
-.tune-in {
-  width: 20vh;
-  height: 10vh;
-  font-size: 1.5rem;
-  border-radius: 25px !important;
-}
-
 .album-art {
   border-radius: 15px;
   border: 2px black solid;
@@ -238,30 +267,27 @@ export default {
   font-weight: bold;
 }
 
-.artist {
-  font-size: 15px;
-  font-style: italic;
+.album {
+  font-size: 20px;
+  font-style: bold;
 }
 
-.volume-slider {
-  width: 50%;
+.artist {
+  font-size: 15px;
 }
 
 @media screen and (min-width: 1000px) {
   .album-art {
-    width: 20%;
+    width: 15%;
   }
   .title {
-    font-size: 50px;
+    font-size: 60px;
+  }
+  .album {
+    font-size: 26px;
   }
   .artist {
-    font-size: 20px !important;
-  }
-  .tune-in {
-    font-size: 3rem;
-  }
-  .volume-slider {
-    width: 10%;
+    font-size: 22px;
   }
 }
 </style>
