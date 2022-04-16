@@ -1,17 +1,33 @@
 <template>
-  <div :style="{ 'background-color': vibrantColor }">
+  <div class="player" :style="{ 'background-color': backgroundColor }">
     <div
       class="d-flex flex-column vh-100 justify-content-center align-items-center"
     >
       <div
-        v-show="isBuffering"
-        class="spinner-grow buffer-spinner mb-3"
+        v-show="isBuffering && connectionStatus === 2"
+        class="spinner-grow buffer-spinner"
         :style="{ color: textColor }"
       ></div>
       <div v-if="connectionStatus === 0">
-        <div class="spinner-border text-primary load-spinner"></div>
+        <div
+          class="spinner-border load-spinner"
+          :style="{ color: textColor }"
+        ></div>
       </div>
-      <div v-else-if="connectionStatus === 1" class="w-100">
+      <div v-else-if="connectionStatus === 1">
+        <button
+          type="button"
+          class="btn mt-3 tune-in-button"
+          :style="{
+            'border-color': textColor,
+            'background-color': backgroundColor,
+          }"
+          @click="tuneIn"
+        >
+          Tune In
+        </button>
+      </div>
+      <div v-else-if="connectionStatus === 2" class="w-100 mt-3">
         <img
           class="album-art shadow"
           id="album-img"
@@ -19,7 +35,7 @@
             songMetadata['img'] ||
             'https://static.vecteezy.com/system/resources/previews/003/674/909/large_2x/music-note-icon-song-melody-tune-flat-symbol-free-free-vector.jpg'
           "
-          @load="getVibrantColor"
+          @load="adjustColors"
         />
         <h1 class="title mt-4 text-truncate" :style="{ color: textColor }">
           {{ songMetadata["title"] || "[Untitled]" }}
@@ -35,7 +51,7 @@
           class="btn mt-3 vol-button"
           :style="{
             'border-color': textColor,
-            'background-color': vibrantColor,
+            'background-color': backgroundColor,
           }"
           @click="toggleMute"
         >
@@ -74,10 +90,7 @@
         <h1 class="ps-3 pe-3">
           Could not connect to <b>Vector Radio</b> server
         </h1>
-        <p class="ps-5 pe-5">
-          Please make sure the server is set up properly and refresh the page to
-          try connecting again.
-        </p>
+        <p>Refresh the page to try connecting again</p>
       </div>
     </div>
   </div>
@@ -96,21 +109,16 @@ export default {
       buffers: [],
       audioContext: undefined,
       gainNode: undefined,
+      analyzer: undefined,
       isPlaying: false,
       isBuffering: false,
       isMuted: false,
       minBufferSize: 2,
-      vibrantColor: "#FFFFFF",
+      backgroundColor: "#FFFFFF",
       textColor: "#000000",
     };
   },
   mounted() {
-    this.audioContext = new (window.AudioContext ||
-      window.webkitAudioContext)();
-    this.gainNode = this.audioContext.createGain();
-    this.gainNode.gain.value = 1;
-    this.gainNode.connect(this.audioContext.destination);
-
     this.websocket = new WebSocket(process.env.VUE_APP_SERVER_ADDRESS);
     // this.websocket = new WebSocket("ws://localhost:8001/");
 
@@ -132,20 +140,38 @@ export default {
         this.createNextAudioBuffer(data.pcm_data);
       }
     };
+
+    requestAnimationFrame(this.visualizeAudio);
   },
   methods: {
+    tuneIn() {
+      this.connectionStatus = 2;
+      this.audioContext = new (window.AudioContext ||
+        window.webkitAudioContext)();
+      this.analyzer = this.audioContext.createAnalyser();
+      this.analyzer.fftSize = 2048;
+      this.gainNode = this.audioContext.createGain();
+      this.gainNode.gain.value = 1;
+      this.gainNode.connect(this.analyzer);
+      this.analyzer.connect(this.audioContext.destination);
+
+      if (!this.isBuffering && !this.isPlaying) {
+        this.play();
+      }
+    },
+
     updateSongMetadata(songMetadata) {
       this.songMetadata = songMetadata;
-      console.log({
-        title: songMetadata.title,
-        artist: songMetadata.artist,
-        album: songMetadata.album,
-        sample_rate: songMetadata.sample_rate,
-        frame_count: songMetadata.frame_count,
-        channels: songMetadata.channels,
-        frame_width: songMetadata.frame_width,
-        sample_width: songMetadata.sample_width,
-      });
+      // console.log({
+      //   title: songMetadata.title,
+      //   artist: songMetadata.artist,
+      //   album: songMetadata.album,
+      //   sample_rate: songMetadata.sample_rate,
+      //   frame_count: songMetadata.frame_count,
+      //   channels: songMetadata.channels,
+      //   frame_width: songMetadata.frame_width,
+      //   sample_width: songMetadata.sample_width,
+      // });
     },
 
     play() {
@@ -191,7 +217,11 @@ export default {
         // buffer at least two segments
         if (this.buffers.length > this.minBufferSize) {
           this.isBuffering = false;
-          this.play();
+          if (this.connectionStatus == 2) {
+            this.play();
+          } else {
+            this.buffers.shift();
+          }
         } else {
           this.isBuffering = true;
         }
@@ -206,13 +236,13 @@ export default {
       );
     },
 
-    getVibrantColor() {
+    adjustColors() {
       const img = document.getElementById("album-img");
       const vib = new Vibrant(img);
       vib.getPalette().then(
         (palette) => {
           let color = palette.LightMuted;
-          this.vibrantColor = color.hex || "#000000";
+          this.backgroundColor = color.hex || "#000000";
           let r = color.r;
           let g = color.g;
           let b = color.b;
@@ -225,55 +255,78 @@ export default {
         (err) => console.log(err)
       );
     },
+
+    visualizeAudio() {
+      requestAnimationFrame(this.visualizeAudio);
+      if (this.analyzer === undefined) {
+        return;
+      }
+
+      let freqBuffer = new Uint8Array(this.analyzer.fftSize);
+      this.analyzer.getByteFrequencyData(freqBuffer);
+    },
   },
 };
 </script>
 
 <style scoped>
-transition div {
-  transition: background-color 4s;
+.player {
+  position: relative;
+  transition: 1s;
+}
+
+.tune-in-button {
+  font-size: 40px;
+  font-weight: bold;
 }
 
 .vol-button {
   border-width: 2px;
   border-radius: 10px;
   padding: 5px;
+  transition: 1s;
 }
 
 .vol-icon {
   width: 2.5rem;
   height: 2.5rem;
+  transition: 1s;
 }
 
 .load-spinner {
   width: 10vh;
   height: 10vh;
   border-width: 5px;
+  transition: 1s;
 }
 
 .buffer-spinner {
   position: absolute;
   top: 10vh;
+  transition: 1s;
 }
 
 .album-art {
   border-radius: 15px;
-  border: 2px black solid;
   width: 70%;
+  transition: 1s;
 }
 
 .title {
   font-size: 30px;
   font-weight: bold;
+  transition: 1s;
 }
 
 .album {
   font-size: 20px;
   font-style: bold;
+  transition: 1s;
 }
 
 .artist {
   font-size: 15px;
+  transition: 1s;
 }
 
 @media screen and (min-width: 1000px) {
@@ -281,13 +334,16 @@ transition div {
     width: 15%;
   }
   .title {
-    font-size: 60px;
+    font-size: 65px;
   }
   .album {
-    font-size: 26px;
+    font-size: 35px;
   }
   .artist {
     font-size: 22px;
+  }
+  .tune-in-button {
+    font-size: 30px;
   }
 }
 </style>

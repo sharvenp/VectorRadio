@@ -23,7 +23,7 @@ SONG_DIR = os.getenv('SONG_DIR')
 SERVER_HOST = os.getenv('SERVER_HOST')
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
-CHUNK_SIZE_MS = 1000
+CHUNK_SIZE_MS = 2000
 ZERO_POINT_TOLERANCE = 0.0005
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
