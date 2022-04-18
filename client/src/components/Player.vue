@@ -20,6 +20,7 @@
           class="btn mt-3 tune-in-button"
           :style="{
             'border-color': textColor,
+            color: textColor,
             'background-color': backgroundColor,
           }"
           @click="tuneIn"
@@ -93,6 +94,7 @@
         <p>Refresh the page to try connecting again</p>
       </div>
     </div>
+    <canvas v-if="connectionStatus == 2" id="visualizer"></canvas>
   </div>
 </template>
 
@@ -114,8 +116,9 @@ export default {
       isBuffering: false,
       isMuted: false,
       minBufferSize: 2,
-      backgroundColor: "#FFFFFF",
-      textColor: "#000000",
+      backgroundColor: "#000000",
+      textColor: "#FFFFFF",
+      visualizerColor: "#FFFFFF",
     };
   },
   mounted() {
@@ -140,7 +143,6 @@ export default {
         this.createNextAudioBuffer(data.pcm_data);
       }
     };
-
     requestAnimationFrame(this.visualizeAudio);
   },
   methods: {
@@ -149,7 +151,7 @@ export default {
       this.audioContext = new (window.AudioContext ||
         window.webkitAudioContext)();
       this.analyzer = this.audioContext.createAnalyser();
-      this.analyzer.fftSize = 2048;
+      this.analyzer.fftSize = 512;
       this.gainNode = this.audioContext.createGain();
       this.gainNode.gain.value = 1;
       this.gainNode.connect(this.analyzer);
@@ -251,6 +253,7 @@ export default {
           } else {
             this.textColor = "#FFFFFF";
           }
+          this.visualizerColor = palette.Vibrant.rgb;
         },
         (err) => console.log(err)
       );
@@ -262,14 +265,43 @@ export default {
         return;
       }
 
-      let freqBuffer = new Uint8Array(this.analyzer.fftSize);
+      let length = this.analyzer.frequencyBinCount;
+      let freqBuffer = new Uint8Array(length);
       this.analyzer.getByteFrequencyData(freqBuffer);
+      let canvas = document.getElementById("visualizer");
+
+      if (canvas === undefined) return;
+
+      let baseHeight = 0;
+      let maxHeight = window.innerHeight / 2;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      let ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let space = canvas.width / length;
+      ctx.fillStyle = `rgba(${this.visualizerColor[0]},${this.visualizerColor[1]}, ${this.visualizerColor[2]}, 0.5)`;
+      for (let i = 0; i < length; i++) {
+        let val = freqBuffer[i] / 255;
+        ctx.fillRect(
+          i * space,
+          canvas.height - (baseHeight + maxHeight * val),
+          space,
+          baseHeight + maxHeight * val
+        );
+      }
     },
   },
 };
 </script>
 
 <style scoped>
+#visualizer {
+  top: 0;
+  left: 0;
+  position: absolute;
+  pointer-events: none;
+}
+
 .player {
   position: relative;
   transition: 1s;
@@ -309,7 +341,6 @@ export default {
 .album-art {
   border-radius: 15px;
   width: 70%;
-  transition: 1s;
 }
 
 .title {

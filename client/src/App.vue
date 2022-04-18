@@ -14,6 +14,11 @@ export default {
 </script>
 
 <style>
+html,
+body {
+  overflow: hidden;
+}
+
 @font-face {
   font-family: "Mulish Light";
   src: url("../assets/Mulish-Light.ttf") format("truetype");
@@ -28,6 +33,6 @@ export default {
   font-family: "Mulish";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-align: center; 
+  text-align: center;
 }
 </style>
