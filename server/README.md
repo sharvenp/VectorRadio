@@ -1,3 +1,3 @@
-# Server Configuration
+# Vector Radio Music Server Configuration
 
 TODO
