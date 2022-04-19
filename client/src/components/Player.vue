@@ -15,6 +15,14 @@
         ></div>
       </div>
       <div v-else-if="connectionStatus === 1">
+        <h1
+          class="display-1"
+          :style="{
+            color: textColor,
+          }"
+        >
+          <b>Vector Radio</b>
+        </h1>
         <button
           type="button"
           class="btn mt-3 tune-in-button"
@@ -28,9 +36,9 @@
           Tune In
         </button>
       </div>
-      <div v-else-if="connectionStatus === 2" class="w-100 mt-3">
+      <div v-else-if="connectionStatus === 2" class="metadata w-100 mt-5">
         <img
-          class="album-art shadow"
+          class="album-art shadow no-select"
           id="album-img"
           :src="
             songMetadata['img'] ||
@@ -38,13 +46,22 @@
           "
           @load="adjustColors"
         />
-        <h1 class="title mt-4 text-truncate" :style="{ color: textColor }">
+        <h1
+          class="ps-5 pe-5 title mt-4 no-select"
+          :style="{ color: textColor }"
+        >
           {{ songMetadata["title"] || "[Untitled]" }}
         </h1>
-        <h2 class="album mt-3 text-truncate" :style="{ color: textColor }">
+        <h2
+          class="ps-5 pe-5 album mt-3 text-truncate no-select"
+          :style="{ color: textColor }"
+        >
           {{ songMetadata["album"] || "[Unknown Album]" }}
         </h2>
-        <h3 class="artist mt-3 text-truncate" :style="{ color: textColor }">
+        <h3
+          class="ps-5 pe-5 artist mt-3 text-truncate no-select"
+          :style="{ color: textColor }"
+        >
           {{ songMetadata["artist"] || "[Unknwon Artist]" }}
         </h3>
         <button
@@ -52,7 +69,6 @@
           class="btn mt-3 vol-button"
           :style="{
             'border-color': textColor,
-            'background-color': backgroundColor,
           }"
           @click="toggleMute"
         >
@@ -87,19 +103,25 @@
         </button>
       </div>
       <div v-else-if="connectionStatus === -1">
-        <h1>¯\_(ツ)_/¯</h1>
-        <h1 class="ps-3 pe-3">
-          Could not connect to <b>Vector Radio</b> server
+        <h1 :style="{ color: textColor }">¯\_(ツ)_/¯</h1>
+        <h1 class="ps-3 pe-3" :style="{ color: textColor }">
+          Could not connect to <b>Vector Radio</b>
         </h1>
-        <p>Refresh the page to try connecting again</p>
+        <p :style="{ color: textColor }">
+          Refresh the page to try connecting again
+        </p>
       </div>
     </div>
-    <canvas v-if="connectionStatus == 2" id="visualizer"></canvas>
+    <canvas
+      v-if="connectionStatus == 2 && isVisualizerEnabled"
+      id="visualizer"
+    ></canvas>
   </div>
 </template>
 
 <script>
 import Vibrant from "node-vibrant";
+// import Queue from "./QueueModal.vue";
 
 export default {
   name: "Player",
@@ -115,11 +137,15 @@ export default {
       isPlaying: false,
       isBuffering: false,
       isMuted: false,
-      minBufferSize: 2,
+      isVisualizerEnabled: false,
+      minBufferSize: 1,
       backgroundColor: "#000000",
       textColor: "#FFFFFF",
       visualizerColor: "#FFFFFF",
     };
+  },
+  components: {
+    // Queue,
   },
   mounted() {
     this.websocket = new WebSocket(process.env.VUE_APP_SERVER_ADDRESS);
@@ -164,16 +190,6 @@ export default {
 
     updateSongMetadata(songMetadata) {
       this.songMetadata = songMetadata;
-      // console.log({
-      //   title: songMetadata.title,
-      //   artist: songMetadata.artist,
-      //   album: songMetadata.album,
-      //   sample_rate: songMetadata.sample_rate,
-      //   frame_count: songMetadata.frame_count,
-      //   channels: songMetadata.channels,
-      //   frame_width: songMetadata.frame_width,
-      //   sample_width: songMetadata.sample_width,
-      // });
     },
 
     play() {
@@ -243,7 +259,7 @@ export default {
       const vib = new Vibrant(img);
       vib.getPalette().then(
         (palette) => {
-          let color = palette.LightMuted;
+          let color = palette.Muted;
           this.backgroundColor = color.hex || "#000000";
           let r = color.r;
           let g = color.g;
@@ -261,7 +277,7 @@ export default {
 
     visualizeAudio() {
       requestAnimationFrame(this.visualizeAudio);
-      if (this.analyzer === undefined) {
+      if (this.analyzer === undefined || !this.isVisualizerEnabled) {
         return;
       }
 
@@ -272,6 +288,13 @@ export default {
 
       if (canvas === undefined) return;
 
+      this.analyzer.fftSize = Math.min(
+        Math.max(
+          1 << (31 - Math.clz32(Math.round(window.innerWidth * 0.2))),
+          32
+        ),
+        32768
+      );
       let baseHeight = 0;
       let maxHeight = window.innerHeight / 2;
       canvas.width = window.innerWidth;
@@ -285,7 +308,7 @@ export default {
         ctx.fillRect(
           i * space,
           canvas.height - (baseHeight + maxHeight * val),
-          space,
+          space - 1,
           baseHeight + maxHeight * val
         );
       }
@@ -300,6 +323,7 @@ export default {
   left: 0;
   position: absolute;
   pointer-events: none;
+  z-index: 1 !important;
 }
 
 .player {
@@ -308,7 +332,7 @@ export default {
 }
 
 .tune-in-button {
-  font-size: 40px;
+  font-size: 20px;
   font-weight: bold;
 }
 
@@ -336,6 +360,10 @@ export default {
   position: absolute;
   top: 10vh;
   transition: 1s;
+}
+
+.metadata {
+  z-index: 2 !important;
 }
 
 .album-art {
@@ -374,7 +402,7 @@ export default {
     font-size: 22px;
   }
   .tune-in-button {
-    font-size: 30px;
+    font-size: 40px;
   }
 }
 </style>

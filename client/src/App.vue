@@ -19,6 +19,14 @@ body {
   overflow: hidden;
 }
 
+.no-select {
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
 @font-face {
   font-family: "Mulish Light";
   src: url("../assets/Mulish-Light.ttf") format("truetype");
