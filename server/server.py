@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 # constants
 load_dotenv()
 SONG_DIR = os.getenv('SONG_DIR')
-SERVER_HOST = os.getenv('SERVER_HOST')
+SERVER_HOST = '0.0.0.0'
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
 CHUNK_SIZE_MS = 2000
