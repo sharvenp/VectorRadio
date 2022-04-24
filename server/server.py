@@ -27,6 +27,7 @@ CHUNK_SIZE_MS = 2000
 ZERO_POINT_TOLERANCE = 0.0005
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
+song_list = []
 track_metadata = {}
 
 
@@ -53,10 +54,22 @@ def run_radio_server():
         # shuffle all tracks
         random.shuffle(tracks)
 
-        for track in tracks:
+        # create list of all songs
+        global song_list
+        song_list.clear()
+        for i in range(len(tracks)):
+            audio_metadata = eyed3.load(f'{SONG_DIR}/{tracks[i]}')
+            song = {
+                "n": i + 1,
+                "title": audio_metadata.tag.title or "",
+                "artist": audio_metadata.tag.artist or "",
+            }
+            song_list.append(song)
+
+        for i in range(len(tracks)):
 
             # load track
-            # add 3 seconds of trailing silence
+            track = tracks[i]
             sound = AudioSegment.from_mp3(f'{SONG_DIR}/{track}')
             channels = sound.channels
             sample_rate = sound.frame_rate
@@ -75,6 +88,7 @@ def run_radio_server():
             # update the track metadata
             global track_metadata
             track_metadata = {
+                "n": i + 1,
                 "title": audio_metadata.tag.title or "",
                 "artist": audio_metadata.tag.artist or "",
                 "album": audio_metadata.tag.album or "",
@@ -89,7 +103,7 @@ def run_radio_server():
             }
 
             server.send_message_to_all(json.dumps(create_message(
-                "SONG_INFO", 200, extra_info=track_metadata)))
+                "SONG_INFO", 200, extra_info={"metadata": track_metadata, "queue": song_list})))
 
             log(
                 f'✨ Playing {audio_metadata.tag.artist} - [{audio_metadata.tag.title}] ✨')
@@ -159,12 +173,12 @@ def run_radio_server():
                 if (not len(server.clients)):
                     log("No clients connected ...")
                 else:
+                    js = json.dumps(create_message(
+                        "SONG_DATA", 200, extra_info={"pcm_data": pcm_chunk}))
                     log(
-                        f"Sending chunk {i+1}/{len(pcm_chunks)} ({data_sum} bytes) to {len(server.clients)} client(s)")
-
+                        f"Sending chunk {i+1}/{len(pcm_chunks)} ({len(str(js))} bytes) to {len(server.clients)} client(s)")
                     try:
-                        server.send_message_to_all(json.dumps(create_message(
-                            "SONG_DATA", 200, extra_info={"pcm_data": pcm_chunk})))
+                        server.send_message_to_all(js)
                     except:
                         pass  # ¯\_(ツ)_/¯
 
@@ -176,9 +190,9 @@ def run_radio_server():
 # called for every client connecting (after handshake)
 def new_client(client, _):
     log(f"Client {client['id']} connected")
-    global track_metadata
+    global track_metadata, song_list
     server.send_message(client, json.dumps(create_message(
-        "SONG_INFO", 200, extra_info=track_metadata)))
+        "SONG_INFO", 200, extra_info={"metadata": track_metadata, "queue": song_list})))
 
 
 # called for every client disconnecting

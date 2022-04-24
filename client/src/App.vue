@@ -14,6 +14,8 @@ export default {
 </script>
 
 <style>
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@100;300;400;700;900&display=swap");
+
 html,
 body {
   overflow: hidden;
@@ -27,18 +29,8 @@ body {
   user-select: none;
 }
 
-@font-face {
-  font-family: "Mulish Light";
-  src: url("../assets/Mulish-Light.ttf") format("truetype");
-}
-
-@font-face {
-  font-family: "Mulish";
-  src: url("../assets/Mulish-Regular.ttf") format("truetype");
-}
-
 #app {
-  font-family: "Mulish";
+  font-family: "Lato", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
