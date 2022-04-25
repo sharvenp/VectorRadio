@@ -23,7 +23,7 @@ SONG_DIR = os.getenv('SONG_DIR')
 SERVER_HOST = '0.0.0.0'
 # SERVER_HOST = 'localhost'  # use this for local hosting
 SERVER_PORT = int(os.getenv('SERVER_PORT'))
-CHUNK_SIZE_MS = 2000
+CHUNK_SIZE_MS = 1000
 ZERO_POINT_TOLERANCE = 0.0005
 
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
@@ -165,6 +165,8 @@ def run_radio_server():
 
             for i in range(len(pcm_chunks)):
 
+                transmit_time_ms = time.time()
+
                 pcm_chunk = pcm_chunks[i]
                 data_sum = sum([len(b) for b in pcm_chunk])
                 if data_sum == 0:
@@ -176,15 +178,36 @@ def run_radio_server():
                     js = json.dumps(create_message(
                         "SONG_DATA", 200, extra_info={"pcm_data": pcm_chunk}))
                     log(
-                        f"Sending chunk {i+1}/{len(pcm_chunks)} ({len(str(js))} bytes) to {len(server.clients)} client(s)")
+                        f"Sending chunk {i+1}/{len(pcm_chunks)} ({'{0:.2f}'.format(len(str(js)) / 1000000)} MB) to {len(server.clients)} client(s)")
                     try:
                         server.send_message_to_all(js)
                     except:
                         pass  # ¯\_(ツ)_/¯
 
-                # broadcast throttle to ensure new clients can be synced
-                # TODO: upgrade this to also account for drift
-                time.sleep((data_sum / channels) / sample_rate)
+                # calculate broadcast throttle to ensure new clients can be synced
+
+                # time it took to transmit last chunk
+                transmit_time_ms = time.time() - transmit_time_ms
+                # chunk time in seconds
+                chunk_time = ((data_sum / channels) / sample_rate)
+                wait = chunk_time
+
+                # if this is the first chunk, deduct from 25% of current wait time + transmit time from the wait time
+                if i == 0:
+                    deduction = (chunk_time * 0.25) + (transmit_time_ms / 1000)
+                    wait -= deduction
+
+                # look at next chunk length
+                # if it is bigger than the current chunk, then we subtract a
+                # bit from the wait time (10% of the next chunk time)
+                if i < len(pcm_chunks) - 1:
+                    next_chunk = pcm_chunks[i + 1]
+                    next_sum = sum([len(b) for b in next_chunk])
+                    next_time = ((next_sum / channels) / sample_rate)
+                    if next_time > chunk_time:
+                        wait = max(wait - 0.5 * next_time, 0)
+
+                time.sleep(wait)
 
 
 # called for every client connecting (after handshake)

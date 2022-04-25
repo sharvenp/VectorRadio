@@ -47,7 +47,7 @@
             id="album-img"
             :src="
               songMetadata['img'] ||
-              'https://static.vecteezy.com/system/resources/previews/003/674/909/large_2x/music-note-icon-song-melody-tune-flat-symbol-free-free-vector.jpg'
+              require('../../public/default_album_art.webp')
             "
             @load="adjustColors"
           />
@@ -155,7 +155,6 @@ export default {
       isBuffering: false,
       isMuted: false,
       showQueueModal: false,
-      minBufferSize: 1,
       backgroundColor: "#000000",
       textColor: "#FFFFFF",
       visualizerColor: [100, 100, 100],
@@ -187,20 +186,6 @@ export default {
         this.createNextAudioBuffer(data.pcm_data);
       }
     };
-
-    window.addEventListener("resize", () => {
-      if (!this.analyzer) {
-        return;
-      }
-
-      this.analyzer.fftSize = Math.min(
-        Math.max(
-          1 << (31 - Math.clz32(Math.round(window.innerWidth * 0.2))),
-          32
-        ),
-        32768
-      );
-    });
   },
   methods: {
     tuneIn() {
@@ -213,6 +198,21 @@ export default {
       this.gainNode.gain.value = 1;
       this.gainNode.connect(this.analyzer);
       this.analyzer.connect(this.audioContext.destination);
+
+      const calculateFFTSize = () => {
+        if (!this.analyzer) {
+          return;
+        }
+        this.analyzer.fftSize = Math.min(
+          Math.max(
+            1 << (31 - Math.clz32(Math.round(window.innerWidth * 0.2))),
+            32
+          ),
+          32768
+        );
+      };
+      window.addEventListener("resize", calculateFFTSize);
+      calculateFFTSize();
 
       if (!this.isBuffering && !this.isPlaying) {
         this.play();
@@ -265,7 +265,7 @@ export default {
 
       if (!this.isPlaying) {
         // buffer at least two segments
-        if (this.buffers.length > this.minBufferSize) {
+        if (this.buffers.length > 1) {
           this.isBuffering = false;
           if (this.connectionStatus == 2) {
             this.play();
@@ -287,6 +287,10 @@ export default {
     },
 
     adjustColors() {
+      if (!this.songMetadata || !this.songMetadata.img) {
+        return;
+      }
+
       const img = document.getElementById("album-img");
       const vib = new Vibrant(img);
       vib.getPalette().then(
@@ -335,8 +339,8 @@ export default {
 }
 
 .load-spinner {
-  width: 10vh;
-  height: 10vh;
+  width: 20vh;
+  height: 20vh;
   border-width: 5px;
   transition: 1s;
 }
