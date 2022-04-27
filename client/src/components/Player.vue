@@ -263,6 +263,8 @@ export default {
 
       this.buffers.push(channelBuffers);
 
+      console.log(this.buffers.length);
+
       if (!this.isPlaying) {
         // buffer at least two segments
         if (this.buffers.length > 1) {

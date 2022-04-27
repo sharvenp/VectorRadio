@@ -7,6 +7,10 @@ import time
 import random
 import base64
 
+# linear regression for timing
+import math
+from linreg import LinearRegression
+
 # audio & mp3
 from pydub import AudioSegment
 from pydub.utils import make_chunks
@@ -29,6 +33,7 @@ ZERO_POINT_TOLERANCE = 0.0005
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 song_list = []
 track_metadata = {}
+linreg_estimator = LinearRegression(50)
 
 
 def log(message):
@@ -163,9 +168,11 @@ def run_radio_server():
 
             log("Starting broadcast")
 
+            offset = 0
+
             for i in range(len(pcm_chunks)):
 
-                transmit_time_ms = time.time()
+                transmit_time = time.time()
 
                 pcm_chunk = pcm_chunks[i]
                 data_sum = sum([len(b) for b in pcm_chunk])
@@ -184,28 +191,33 @@ def run_radio_server():
                     except:
                         pass  # ¯\_(ツ)_/¯
 
-                # calculate broadcast throttle to ensure new clients can be synced
+                # linear regression estimator estimates the transmit time given chunk size
+                transmit_time = time.time() - transmit_time
+                linreg_estimator.add_point(data_sum, transmit_time)
 
-                # time it took to transmit last chunk
-                transmit_time_ms = time.time() - transmit_time_ms
+                # calculate broadcast throttle to ensure new clients can be synced
+                # formula: wait = (0.9 * chunk_time) - lin_reg(next_chunk_size) + offset
+                # offset = last_chunk_time - last_wait
+
                 # chunk time in seconds
                 chunk_time = ((data_sum / channels) / sample_rate)
-                wait = chunk_time
 
-                # if this is the first chunk, deduct from 25% of current wait time + transmit time from the wait time
-                if i == 0:
-                    deduction = (chunk_time * 0.25) + (transmit_time_ms / 1000)
-                    wait -= deduction
-
-                # look at next chunk length
-                # if it is bigger than the current chunk, then we subtract a
-                # bit from the wait time (10% of the next chunk time)
+                # look at next chunk length and subtract a fraction from the wait time
                 if i < len(pcm_chunks) - 1:
-                    next_chunk = pcm_chunks[i + 1]
-                    next_sum = sum([len(b) for b in next_chunk])
-                    next_time = ((next_sum / channels) / sample_rate)
-                    if next_time > chunk_time:
-                        wait = max(wait - 0.5 * next_time, 0)
+                    next_chunk_size = sum(
+                        [len(b) for b in pcm_chunks[i + 1]])
+
+                    transmit_time_hat = linreg_estimator.estimate(
+                        next_chunk_size)
+                    if math.isnan(transmit_time_hat) or math.isinf(transmit_time_hat):
+                        transmit_time_hat = 0
+                        linreg_estimator.clear()
+
+                    transmit_time_hat = max(transmit_time_hat, 0)
+
+                    wait = max((0.9 * chunk_time) -
+                               transmit_time_hat + offset, 0)
+                    offset = max(chunk_time - wait, 0)
 
                 time.sleep(wait)
 
