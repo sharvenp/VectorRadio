@@ -213,7 +213,8 @@ def run_radio_server():
                         transmit_time_hat = 0
                         linreg_estimator.clear()
 
-                    transmit_time_hat = max(transmit_time_hat, 0)
+                    # transmit_time_hat = max(transmit_time_hat, 0)
+                    transmit_time_hat = 0
 
                     wait = max((0.5 * chunk_time) -
                                transmit_time_hat + offset, 0)
