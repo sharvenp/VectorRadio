@@ -7,10 +7,6 @@ import time
 import random
 import base64
 
-# linear regression for timing
-import math
-from linreg import LinearRegression
-
 # audio & mp3
 from pydub import AudioSegment
 from pydub.utils import make_chunks
@@ -33,7 +29,6 @@ ZERO_POINT_TOLERANCE = 0.0005
 server = WebsocketServer(host=SERVER_HOST, port=SERVER_PORT)
 song_list = []
 track_metadata = {}
-linreg_estimator = LinearRegression(50)
 
 
 def log(message):
@@ -193,32 +188,11 @@ def run_radio_server():
 
                 # linear regression estimator estimates the transmit time given chunk size
                 transmit_time = time.time() - transmit_time
-                linreg_estimator.add_point(data_sum, transmit_time)
 
                 # calculate broadcast throttle to ensure new clients can be synced
-                # formula: wait = (0.5 * chunk_time) - lin_reg(next_chunk_size) + offset
-                # offset = last_chunk_time - last_wait
-
-                # chunk time in seconds
                 chunk_time = ((data_sum / channels) / sample_rate)
-
-                # look at next chunk length and subtract a fraction from the wait time
-                if i < len(pcm_chunks) - 1:
-                    next_chunk_size = sum(
-                        [len(b) for b in pcm_chunks[i + 1]])
-
-                    transmit_time_hat = linreg_estimator.estimate(
-                        next_chunk_size)
-                    if math.isnan(transmit_time_hat) or math.isinf(transmit_time_hat):
-                        transmit_time_hat = 0
-                        linreg_estimator.clear()
-
-                    # transmit_time_hat = max(transmit_time_hat, 0)
-                    transmit_time_hat = 0
-
-                    wait = max((0.5 * chunk_time) -
-                               transmit_time_hat + offset, 0)
-                    offset = max(chunk_time - wait, 0)
+                wait = (0.3 * chunk_time) + offset
+                offset = max(chunk_time - wait, 0)
 
                 time.sleep(wait)
 
