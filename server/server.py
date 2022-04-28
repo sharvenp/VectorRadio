@@ -196,7 +196,7 @@ def run_radio_server():
                 linreg_estimator.add_point(data_sum, transmit_time)
 
                 # calculate broadcast throttle to ensure new clients can be synced
-                # formula: wait = (0.9 * chunk_time) - lin_reg(next_chunk_size) + offset
+                # formula: wait = (0.5 * chunk_time) - lin_reg(next_chunk_size) + offset
                 # offset = last_chunk_time - last_wait
 
                 # chunk time in seconds
@@ -215,7 +215,7 @@ def run_radio_server():
 
                     transmit_time_hat = max(transmit_time_hat, 0)
 
-                    wait = max((0.7 * chunk_time) -
+                    wait = max((0.5 * chunk_time) -
                                transmit_time_hat + offset, 0)
                     offset = max(chunk_time - wait, 0)
 
