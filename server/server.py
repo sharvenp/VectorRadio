@@ -191,7 +191,7 @@ def run_radio_server():
 
                 # calculate broadcast throttle to ensure new clients can be synced
                 chunk_time = ((data_sum / channels) / sample_rate)
-                wait = (0.3 * chunk_time) + offset
+                wait = (0.4 * chunk_time) + offset
                 offset = max(chunk_time - wait, 0)
 
                 time.sleep(wait)
