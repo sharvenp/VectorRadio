@@ -383,7 +383,7 @@ export default {
 
 @media screen and (min-width: 1000px) {
   .album-art {
-    width: 500px;
+    width: 400px;
   }
   .title {
     font-size: 65px;
