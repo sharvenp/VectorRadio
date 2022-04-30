@@ -14,4 +14,4 @@ Create a `.env` file at the same level as `server.py` and specify the following 
 - `SERVER_PORT` - The port the Vector Radio server will run on
 - `SONG_DIR` - Absolute path to the directory with MP3 music
 
-Run the server with: `python server.py`
+Run `server.py` to run server
